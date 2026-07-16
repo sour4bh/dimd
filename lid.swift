@@ -56,16 +56,18 @@ func runFader() {
         print("\ndone")
         exit(0)
     }
-    // Full brightness from 69° up — normal working postures never dim;
-    // dimming only starts once the lid tilts toward you.
+    // The fader tops out at *your* brightness, not 100%: from 69° up the
+    // panel stays where you had it — normal working postures never dim —
+    // and dimming only starts once the lid tilts toward you.
     let floor: Float = 15, ceiling: Float = 69
-    print("lid = brightness fader (\(Int(floor))°–\(Int(ceiling))°, full above) — Ctrl-C to stop")
+    let top = (faderOriginal ?? 0) < 0.05 ? 0.5 : faderOriginal!  // sane ceiling if starting near-black
+    print("lid = brightness fader (\(Int(floor))°–\(Int(ceiling))°, \(percent(top)) above) — Ctrl-C to stop")
     var level = brightness(of: builtin)
     var lastSet: Float = -1
     var lastShown: Int = -1
     while true {
         if let angle = sensor.angle() {
-            let target = min(max((angle - floor) / (ceiling - floor), 0), 1)
+            let target = top * min(max((angle - floor) / (ceiling - floor), 0), 1)
             level += (target - level) * 0.06  // low-pass: ~140ms glide
             if abs(level - lastSet) > 0.0005 {
                 _ = displayServices.set(builtin, level)
