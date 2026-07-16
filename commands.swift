@@ -9,6 +9,7 @@ func runStatus() {
     print("external:  \(displays.hasExternal ? "connected" : "none")")
     print("idle:      \(Int(idleSeconds()))s (threshold \(Int(config.threshold))s)")
     print("state:     \(DimState.read() != nil ? "dimmed" : "normal")")
+    print("lidfader:  \(config.lidfader ? "on" : "off")")
     if let angle = lidAngle() { print("lid:       \(Int(angle))°") }
 }
 
@@ -78,12 +79,13 @@ func runConfig(_ args: [String]) {
         print("blinks=\(config.blinks)       # goodnight blinks before the fade")
         print("dip=\(config.dip)      # blink dip depth (0-1, fraction of brightness)")
         print("fade=\(config.fade)      # fade-to-black seconds")
+        print("lidfader=\(config.lidfader ? "on" : "off")  # lid angle drives the backlight (daemon)")
         print("file: \(Config.file.path)")
         return
     }
     guard args.count == 3, args[0] == "set" else { die("usage: dimd config set <key> <value>") }
     guard config.set(key: args[1], value: args[2]) else {
-        die("invalid \(args[1])=\(args[2]) (keys: threshold, blinks, dip, fade)")
+        die("invalid \(args[1])=\(args[2]) (keys: threshold, blinks, dip, fade, lidfader)")
     }
     config.save()
     print("\(args[1])=\(args[2]) saved")

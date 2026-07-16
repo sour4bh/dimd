@@ -5,6 +5,7 @@ struct Config {
     var blinks: Int = 2                // goodnight blinks before the fade
     var dip: Float = 0.35              // blink dip depth, fraction of current brightness
     var fade: TimeInterval = 0.9       // final fade-to-black duration, seconds
+    var lidfader = false               // lid angle drives the backlight (daemon)
 
     static let file = FileManager.default.homeDirectoryForCurrentUser
         .appendingPathComponent(".config/dimd/config")
@@ -37,6 +38,12 @@ struct Config {
         case "fade":
             guard let parsed = TimeInterval(value), parsed > 0 else { return false }
             fade = parsed
+        case "lidfader":
+            switch value.lowercased() {
+            case "on", "true", "1": lidfader = true
+            case "off", "false", "0": lidfader = false
+            default: return false
+            }
         default:
             return false
         }
@@ -49,6 +56,7 @@ struct Config {
         blinks=\(blinks)
         dip=\(dip)
         fade=\(fade)
+        lidfader=\(lidfader ? "on" : "off")
 
         """
         do {

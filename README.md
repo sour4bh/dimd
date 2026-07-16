@@ -23,7 +23,13 @@ while the display stays technically awake.
 
 Dimming announces itself with a goodnight double-blink before the backlight
 closes. Restore is instant (≤ 0.25 s) on any input, monitor connect, or switch
-to battery. Brightness is saved before dimming and restored exactly; the saved
+to battery.
+
+With `lidfader=on`, the lid becomes a physical brightness knob: at 69° and
+above the panel stays at your setpoint (brightness keys keep working, the
+daemon follows them); tilting below 69° scales the backlight down to 0% at
+15°, tracked at 60 Hz while the lid moves. The idle goodnight-dim still
+applies on top. Brightness is saved before dimming and restored exactly; the saved
 value persists across daemon restarts (`~/.local/state/dimd/brightness`).
 
 ## Commands
@@ -54,6 +60,7 @@ dimd daemon              run the idle watcher (used by launchd)
 | `blinks` | `2` | goodnight blinks before the fade |
 | `dip` | `0.35` | blink dip depth (0–1, fraction of current brightness) |
 | `fade` | `0.9` | fade-to-black duration in seconds |
+| `lidfader` | `off` | lid angle drives the backlight, always-on in the daemon |
 
 `dimd config set` writes the file and restarts the daemon; if you edit the file
 by hand, `launchctl kickstart -k gui/$(id -u)/local.dimd` to reload.

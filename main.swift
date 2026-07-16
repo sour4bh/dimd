@@ -28,7 +28,7 @@ usage: dimd <command>
   lid [--watch]        read the lid angle sensor
   fader                lid angle drives the backlight, live
   config               show configuration (~/.config/dimd/config)
-  config set <k> <v>   set threshold | blinks | dip | fade (restarts daemon)
+  config set <k> <v>   set threshold | blinks | dip | fade | lidfader (restarts daemon)
   selftest             verify brightness control works
   daemon               run the idle watcher (used by launchd)
 """

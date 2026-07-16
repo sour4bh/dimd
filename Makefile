@@ -8,7 +8,7 @@ install: dimd
 	ln -sf $(CURDIR)/dimd $(HOME)/.local/bin/dimd
 	sed -e 's|/Users/sour4bh/projects/dimd|$(CURDIR)|g' -e 's|/Users/sour4bh|$(HOME)|g' local.dimd.plist > $(PLIST)
 	launchctl bootout gui/$(UID)/local.dimd 2>/dev/null || true
-	launchctl bootstrap gui/$(UID) $(PLIST)
+	launchctl bootstrap gui/$(UID) $(PLIST) || { sleep 1; launchctl bootstrap gui/$(UID) $(PLIST); }  # bootout drains async; retry once
 
 reload: install
 
