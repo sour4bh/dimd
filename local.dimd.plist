@@ -7,8 +7,7 @@
     <key>ProgramArguments</key>
     <array>
         <string>/Users/sour4bh/projects/dimd/dimd</string>
-        <string>--threshold</string>
-        <string>600</string>
+        <string>daemon</string>
     </array>
     <key>RunAtLoad</key>
     <true/>

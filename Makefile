@@ -1,8 +1,8 @@
 UID   := $(shell id -u)
 PLIST := $(HOME)/Library/LaunchAgents/local.dimd.plist
 
-dimd: dimd.swift
-	swiftc -O dimd.swift -o dimd
+dimd: $(wildcard *.swift)
+	swiftc -O -o dimd *.swift
 
 install: dimd
 	sed -e 's|/Users/sour4bh/projects/dimd|$(CURDIR)|g' -e 's|/Users/sour4bh|$(HOME)|g' local.dimd.plist > $(PLIST)
