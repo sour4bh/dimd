@@ -5,26 +5,39 @@ import IOKit.hid
 // Apple Silicon MacBooks expose the lid angle as a HID sensor (usage page
 // 0x20 Sensor, usage 0x8A); feature report 1 carries the angle in degrees.
 // Groundwork for lid-angle automations.
-func lidAngle() -> Float? {
-    let manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
-    let matching: [String: Any] = [kIOHIDDeviceUsagePageKey: 0x20, kIOHIDDeviceUsageKey: 0x8A]
-    IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
-    _ = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
-    defer { _ = IOHIDManagerClose(manager, IOOptionBits(kIOHIDOptionsTypeNone)) }
+final class LidSensor {
+    private let manager: IOHIDManager  // keeps the device connection alive
+    private let device: IOHIDDevice
 
-    guard let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return nil }
-    for device in devices {
-        guard IOHIDDeviceOpen(device, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess else { continue }
-        defer { _ = IOHIDDeviceClose(device, IOOptionBits(kIOHIDOptionsTypeNone)) }
+    init?() {
+        manager = IOHIDManagerCreate(kCFAllocatorDefault, IOOptionBits(kIOHIDOptionsTypeNone))
+        let matching: [String: Any] = [kIOHIDDeviceUsagePageKey: 0x20, kIOHIDDeviceUsageKey: 0x8A]
+        IOHIDManagerSetDeviceMatching(manager, matching as CFDictionary)
+        _ = IOHIDManagerOpen(manager, IOOptionBits(kIOHIDOptionsTypeNone))
+        guard let devices = IOHIDManagerCopyDevices(manager) as? Set<IOHIDDevice> else { return nil }
+        for candidate in devices where IOHIDDeviceOpen(candidate, IOOptionBits(kIOHIDOptionsTypeNone)) == kIOReturnSuccess {
+            if Self.read(candidate) != nil {
+                device = candidate
+                return
+            }
+            IOHIDDeviceClose(candidate, IOOptionBits(kIOHIDOptionsTypeNone))
+        }
+        return nil
+    }
+
+    func angle() -> Float? { Self.read(device) }
+
+    private static func read(_ device: IOHIDDevice) -> Float? {
         var report = [UInt8](repeating: 0, count: 8)
         var length: CFIndex = report.count
         guard IOHIDDeviceGetReport(device, kIOHIDReportTypeFeature, 1, &report, &length) == kIOReturnSuccess,
-              length >= 3 else { continue }
+              length >= 3 else { return nil }
         let raw = UInt16(report[1]) | (UInt16(report[2]) << 8)
         return raw > 360 ? Float(raw) / 100 : Float(raw)  // some firmware reports hundredths of a degree
     }
-    return nil
 }
+
+func lidAngle() -> Float? { LidSensor()?.angle() }
 
 // The fader: lid angle drives the backlight directly. Proof-of-concept for
 // lid-angle automations.
@@ -33,7 +46,7 @@ private var faderOriginal: Float?
 
 func runFader() {
     guard let builtin = onlineDisplays().builtin else { die("built-in display offline") }
-    guard lidAngle() != nil else { die("lid angle sensor not found") }
+    guard let sensor = LidSensor() else { die("lid angle sensor not found") }
     faderDisplay = builtin
     faderOriginal = brightness(of: builtin)
     signal(SIGINT) { _ in
@@ -44,23 +57,25 @@ func runFader() {
         exit(0)
     }
     print("lid = brightness fader (15°–105°) — Ctrl-C to stop")
-    var last: Float = -1
+    var level = faderOriginal ?? 0
+    var lastSet: Float = -1
     while true {
-        if let angle = lidAngle() {
-            let level = min(max((angle - 15) / 90, 0), 1)
-            if abs(level - last) > 0.005 {  // only touch the panel when the lid actually moved
+        if let angle = sensor.angle() {
+            let target = min(max((angle - 15) / 90, 0), 1)
+            level += (target - level) * 0.15  // low-pass: glide to the target, don't step
+            if abs(level - lastSet) > 0.002 {
                 _ = displayServices.set(builtin, level)
-                last = level
+                lastSet = level
             }
             print("\r\(Int(angle))° → \(percent(level))   ", terminator: "")
             fflush(stdout)
         }
-        usleep(50_000)
+        usleep(16_000)  // ~60 Hz
     }
 }
 
 func runLid(watch: Bool) {
-    guard let first = lidAngle() else { die("lid angle sensor not found") }
+    guard let sensor = LidSensor(), let first = sensor.angle() else { die("lid angle sensor not found") }
     if !watch {
         print("lid angle: \(Int(first))°")
         return
@@ -70,6 +85,6 @@ func runLid(watch: Bool) {
         print("\rlid angle: \(Int(angle))°   ", terminator: "")
         fflush(stdout)
         usleep(100_000)
-        angle = lidAngle() ?? angle
+        angle = sensor.angle() ?? angle
     }
 }
