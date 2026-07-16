@@ -1,0 +1,25 @@
+UID   := $(shell id -u)
+PLIST := $(HOME)/Library/LaunchAgents/local.dimd.plist
+
+dimd: dimd.swift
+	swiftc -O dimd.swift -o dimd
+
+install: dimd
+	sed -e 's|/Users/sour4bh/projects/dimd|$(CURDIR)|g' -e 's|/Users/sour4bh|$(HOME)|g' local.dimd.plist > $(PLIST)
+	launchctl bootout gui/$(UID)/local.dimd 2>/dev/null || true
+	launchctl bootstrap gui/$(UID) $(PLIST)
+
+reload: install
+
+status:
+	./dimd --status
+	@launchctl print gui/$(UID)/local.dimd 2>/dev/null | grep -E 'state|pid' || echo "agent: not loaded"
+
+log:
+	tail -20 $(HOME)/Library/Logs/dimd.log
+
+uninstall:
+	launchctl bootout gui/$(UID)/local.dimd 2>/dev/null || true
+	rm -f $(PLIST)
+
+.PHONY: install reload status log uninstall
