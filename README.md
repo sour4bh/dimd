@@ -35,6 +35,7 @@ dimd demo                blink, fade to black, hold, restore
 dimd dim                 dim now (next input restores)
 dimd wake                restore the backlight now
 dimd lid [--watch]       read the lid angle sensor
+dimd fader               lid angle drives the backlight, live (Ctrl-C restores)
 dimd config              show configuration
 dimd config set <k> <v>  set a key (restarts the daemon)
 dimd selftest            verify brightness control works
@@ -79,8 +80,9 @@ make uninstall
   daemon restarts. Its mtime marks when the dim began, so only input *newer
   than the dim* wakes it.
 - `dimd lid` reads the lid angle HID sensor (usage page 0x20, usage 0x8A,
-  feature report 1) on Apple Silicon MacBooks — groundwork for lid-angle
-  automations (e.g. dim on half-closed lid).
+  feature report 1) on Apple Silicon MacBooks. `dimd fader` maps the angle
+  (15°–105°) straight onto the backlight — groundwork for lid-angle
+  automations (dim on half-closed lid, peek-to-wake).
 
 ## Notes
 

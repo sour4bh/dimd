@@ -1,3 +1,4 @@
+import CoreGraphics
 import Foundation
 import IOKit.hid
 
@@ -23,6 +24,39 @@ func lidAngle() -> Float? {
         return raw > 360 ? Float(raw) / 100 : Float(raw)  // some firmware reports hundredths of a degree
     }
     return nil
+}
+
+// The fader: lid angle drives the backlight directly. Proof-of-concept for
+// lid-angle automations.
+private var faderDisplay: CGDirectDisplayID?
+private var faderOriginal: Float?
+
+func runFader() {
+    guard let builtin = onlineDisplays().builtin else { die("built-in display offline") }
+    guard lidAngle() != nil else { die("lid angle sensor not found") }
+    faderDisplay = builtin
+    faderOriginal = brightness(of: builtin)
+    signal(SIGINT) { _ in
+        if let display = faderDisplay, let original = faderOriginal {
+            _ = displayServices.set(display, original)
+        }
+        print("\ndone")
+        exit(0)
+    }
+    print("lid = brightness fader (15°–105°) — Ctrl-C to stop")
+    var last: Float = -1
+    while true {
+        if let angle = lidAngle() {
+            let level = min(max((angle - 15) / 90, 0), 1)
+            if abs(level - last) > 0.005 {  // only touch the panel when the lid actually moved
+                _ = displayServices.set(builtin, level)
+                last = level
+            }
+            print("\r\(Int(angle))° → \(percent(level))   ", terminator: "")
+            fflush(stdout)
+        }
+        usleep(50_000)
+    }
 }
 
 func runLid(watch: Bool) {

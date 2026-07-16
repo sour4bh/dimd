@@ -25,6 +25,7 @@ usage: dimd <command>
   dim                  dim now (next input restores)
   wake                 restore the backlight now
   lid [--watch]        read the lid angle sensor
+  fader                lid angle drives the backlight, live
   config               show configuration (~/.config/dimd/config)
   config set <k> <v>   set threshold | blinks | dip | fade (restarts daemon)
   selftest             verify brightness control works
@@ -40,6 +41,7 @@ case "demo": runDemo()
 case "dim": runDim()
 case "wake": runWake()
 case "lid": runLid(watch: arguments.contains("--watch"))
+case "fader": runFader()
 case "config": runConfig(Array(arguments.dropFirst()))
 case "selftest": runSelftest()
 case "daemon": Daemon.shared.run()
