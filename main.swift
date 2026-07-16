@@ -24,6 +24,7 @@ usage: dimd <command>
   demo                 blink, fade to black, hold, restore
   dim                  dim now (next input restores)
   wake                 restore the backlight now
+  set <0-100>          set brightness (system-smooth ramp)
   lid [--watch]        read the lid angle sensor
   fader                lid angle drives the backlight, live
   config               show configuration (~/.config/dimd/config)
@@ -40,6 +41,7 @@ case "blink": runBlink()
 case "demo": runDemo()
 case "dim": runDim()
 case "wake": runWake()
+case "set": runSet(Array(arguments.dropFirst()))
 case "lid": runLid(watch: arguments.contains("--watch"))
 case "fader": runFader()
 case "config": runConfig(Array(arguments.dropFirst()))

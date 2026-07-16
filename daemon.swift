@@ -60,9 +60,10 @@ final class Daemon {
         log("blinked goodnight, backlight 0% (was \(percent(current)), idle >= \(Int(config.threshold))s)")
     }
 
-    private func restore(to saved: Float, displays: Displays) {
+    private func restore(to saved: Float, displays: Displays, smooth: Bool = true) {
         guard let builtin = displays.builtin else { return }  // lid closed: retry once the panel is back online
-        guard displayServices.set(builtin, saved) == 0 else {
+        if smooth { fade(builtin, from: brightness(of: builtin), to: saved, over: 0.3) }
+        guard setBrightness(builtin, saved) else {
             log("restore failed, will retry")
             return
         }
@@ -82,7 +83,7 @@ final class Daemon {
     }
 
     func shutdown() {
-        if let state = DimState.read() { restore(to: state.saved, displays: onlineDisplays()) }
+        if let state = DimState.read() { restore(to: state.saved, displays: onlineDisplays(), smooth: false) }  // exiting: instant only
         log("stopped")
         exit(0)
     }

@@ -48,9 +48,20 @@ func runDim() {
 func runWake() {
     guard let state = DimState.read() else { die("not dimmed") }
     guard let builtin = onlineDisplays().builtin else { die("built-in display offline") }
-    guard displayServices.set(builtin, state.saved) == 0 else { die("brightness restore failed") }
+    guard setBrightness(builtin, state.saved) else { die("brightness restore failed") }
     DimState.clear()
     print("restored backlight to \(percent(state.saved))")
+}
+
+func runSet(_ args: [String]) {
+    guard args.count == 1, let target = Int(args[0]), (0...100).contains(target) else {
+        die("usage: dimd set <0-100>")
+    }
+    guard let builtin = onlineDisplays().builtin else { die("built-in display offline") }
+    let value = Float(target) / 100
+    fade(builtin, from: brightness(of: builtin), to: value, over: 0.4)
+    guard setBrightness(builtin, value) else { die("brightness set failed") }
+    print("brightness: \(percent(brightness(of: builtin)))")
 }
 
 func runSelftest() {

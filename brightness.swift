@@ -19,6 +19,12 @@ let displayServices: (get: BrightnessGet, set: BrightnessSet) = {
     )
 }()
 
+// Note: DisplayServicesSetBrightnessSmooth exists but no-ops from external
+// processes, so smoothness is ours to fake: 8ms steps read as continuous.
+func setBrightness(_ display: CGDirectDisplayID, _ value: Float) -> Bool {
+    displayServices.set(display, value) == 0
+}
+
 func brightness(of display: CGDirectDisplayID) -> Float {
     var value: Float = 0
     _ = displayServices.get(display, &value)
@@ -28,10 +34,10 @@ func brightness(of display: CGDirectDisplayID) -> Float {
 func percent(_ value: Float) -> String { "\(Int((value * 100).rounded()))%" }
 
 func fade(_ display: CGDirectDisplayID, from start: Float, to end: Float, over duration: TimeInterval) {
-    let steps = max(Int(duration / 0.02), 1)
+    let steps = max(Int(duration / 0.008), 1)  // ~120 Hz
     for step in 1...steps {
         _ = displayServices.set(display, start + (end - start) * Float(step) / Float(steps))
-        usleep(20_000)
+        usleep(8_000)
     }
 }
 

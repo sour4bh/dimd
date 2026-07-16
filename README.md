@@ -34,8 +34,10 @@ dimd blink               play the goodnight blink at current brightness
 dimd demo                blink, fade to black, hold, restore
 dimd dim                 dim now (next input restores)
 dimd wake                restore the backlight now
+dimd set <0-100>         set brightness with a smooth ramp
 dimd lid [--watch]       read the lid angle sensor
 dimd fader               lid angle drives the backlight, live (Ctrl-C restores)
+                         full brightness at 69° and above; fades out toward 15°
 dimd config              show configuration
 dimd config set <k> <v>  set a key (restarts the daemon)
 dimd selftest            verify brightness control works
@@ -81,8 +83,11 @@ make uninstall
   than the dim* wakes it.
 - `dimd lid` reads the lid angle HID sensor (usage page 0x20, usage 0x8A,
   feature report 1) on Apple Silicon MacBooks. `dimd fader` maps the angle
-  (15°–105°) straight onto the backlight — groundwork for lid-angle
-  automations (dim on half-closed lid, peek-to-wake).
+  (15°–69°, full brightness above) straight onto the backlight — groundwork
+  for lid-angle automations (dim on half-closed lid, peek-to-wake).
+- `DisplayServicesSetBrightnessSmooth` exists but no-ops from external
+  processes; smoothness is faked with 8 ms micro-steps (~120 Hz), which read
+  as continuous.
 
 ## Notes
 

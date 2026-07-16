@@ -51,26 +51,33 @@ func runFader() {
     faderOriginal = brightness(of: builtin)
     signal(SIGINT) { _ in
         if let display = faderDisplay, let original = faderOriginal {
-            _ = displayServices.set(display, original)
+            _ = setBrightness(display, original)
         }
         print("\ndone")
         exit(0)
     }
-    print("lid = brightness fader (15°–105°) — Ctrl-C to stop")
-    var level = faderOriginal ?? 0
+    // Full brightness from 69° up — normal working postures never dim;
+    // dimming only starts once the lid tilts toward you.
+    let floor: Float = 15, ceiling: Float = 69
+    print("lid = brightness fader (\(Int(floor))°–\(Int(ceiling))°, full above) — Ctrl-C to stop")
+    var level = brightness(of: builtin)
     var lastSet: Float = -1
+    var lastShown: Int = -1
     while true {
         if let angle = sensor.angle() {
-            let target = min(max((angle - 15) / 90, 0), 1)
-            level += (target - level) * 0.15  // low-pass: glide to the target, don't step
-            if abs(level - lastSet) > 0.002 {
+            let target = min(max((angle - floor) / (ceiling - floor), 0), 1)
+            level += (target - level) * 0.06  // low-pass: ~140ms glide
+            if abs(level - lastSet) > 0.0005 {
                 _ = displayServices.set(builtin, level)
                 lastSet = level
             }
-            print("\r\(Int(angle))° → \(percent(level))   ", terminator: "")
-            fflush(stdout)
+            if Int(angle) != lastShown {
+                print("\r\(Int(angle))° → \(percent(target))   ", terminator: "")
+                fflush(stdout)
+                lastShown = Int(angle)
+            }
         }
-        usleep(16_000)  // ~60 Hz
+        usleep(8_000)  // ~120 Hz: per-frame steps far below what the eye can catch
     }
 }
 
