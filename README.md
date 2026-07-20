@@ -17,6 +17,20 @@ animation. Single binary, no dependencies, no accessibility permissions.
 
 ## Install
 
+Homebrew (Apple Silicon):
+
+```sh
+brew install sour4bh/tap/dimd
+sudo pmset -c displaysleep 0            # one-time: keep the display awake on AC
+brew services start sour4bh/tap/dimd    # run the idle-dimming daemon
+dimd demo                               # see the goodnight blink + fade + restore
+```
+
+Homebrew 6.0+ asks you to `brew trust sour4bh/tap` the first time — it does
+this for every third-party tap.
+
+From source:
+
 ```sh
 git clone https://github.com/sour4bh/dimd && cd dimd
 make install     # build, install launchd agent
