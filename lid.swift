@@ -44,6 +44,8 @@ func lidAngle() -> Float? { LidSensor()?.angle() }
 // at/above faderCeiling the panel is untouched, so no working posture dims.
 let faderFloor: Float = 15
 let faderCeiling: Float = 69
+let faderMaxStep: Float = 0.04  // max brightness change per 50ms retarget: paces the
+                                // sensor's coarse 5°+ jumps into lurch-free native ramps
 
 func faderTarget(angle: Float, top: Float) -> Float {
     top * min(max((angle - faderFloor) / (faderCeiling - faderFloor), 0), 1)
@@ -69,16 +71,15 @@ func runFader() {
     }
     let top = (faderOriginal ?? 0) < 0.05 ? 0.5 : faderOriginal!  // sane ceiling if starting near-black
     print("lid = brightness fader (\(Int(faderFloor))°–\(Int(faderCeiling))°, \(percent(top)) above) — Ctrl-C to stop")
-    var level = brightness(of: builtin)
-    var lastSet: Float = -1
+    var commanded = brightness(of: builtin)
     var lastShown: Int = -1
     while true {
         if let angle = sensor.angle() {
             let target = faderTarget(angle: angle, top: top)
-            level += (target - level) * 0.06  // low-pass: ~140ms glide
-            if abs(level - lastSet) > 0.0005 {
-                _ = displayServices.set(builtin, level)
-                lastSet = level
+            let delta = target - commanded
+            if abs(delta) > 0.005 {
+                commanded += max(-faderMaxStep, min(faderMaxStep, delta))
+                _ = rampBrightness(builtin, to: commanded)  // native ramp per step, like held brightness keys
             }
             if Int(angle) != lastShown {
                 print("\r\(Int(angle))° → \(percent(target))   ", terminator: "")
@@ -86,7 +87,7 @@ func runFader() {
                 lastShown = Int(angle)
             }
         }
-        usleep(8_000)  // ~120 Hz: per-frame steps far below what the eye can catch
+        usleep(50_000)  // 20Hz retargeting; the animation lives in the system
     }
 }
 

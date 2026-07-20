@@ -19,10 +19,25 @@ let displayServices: (get: BrightnessGet, set: BrightnessSet) = {
     )
 }()
 
-// Note: DisplayServicesSetBrightnessSmooth exists but no-ops from external
-// processes, so smoothness is ours to fake: 8ms steps read as continuous.
 func setBrightness(_ display: CGDirectDisplayID, _ value: Float) -> Bool {
     displayServices.set(display, value) == 0
+}
+
+// The system's native animated ramp (what the brightness keys use).
+// Gotcha: the float argument is a DELTA from current, not an absolute target.
+let displayServicesSmooth: BrightnessSet? = {
+    guard let handle = dlopen("/System/Library/PrivateFrameworks/DisplayServices.framework/DisplayServices", RTLD_LAZY),
+          let symbol = dlsym(handle, "DisplayServicesSetBrightnessSmooth") else { return nil }
+    return unsafeBitCast(symbol, to: BrightnessSet.self)
+}()
+
+// Ramp to an absolute target with the native animation; software fallback.
+func rampBrightness(_ display: CGDirectDisplayID, to target: Float) -> Bool {
+    guard let smooth = displayServicesSmooth else {
+        fade(display, from: brightness(of: display), to: target, over: 0.4)
+        return setBrightness(display, target)
+    }
+    return smooth(display, target - brightness(of: display)) == 0
 }
 
 func brightness(of display: CGDirectDisplayID) -> Float {

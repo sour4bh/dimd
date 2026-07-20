@@ -93,9 +93,13 @@ make uninstall
   (15°–69°) onto the backlight, topping out at whatever brightness you
   started with — groundwork for lid-angle automations (dim on half-closed
   lid, peek-to-wake).
-- `DisplayServicesSetBrightnessSmooth` exists but no-ops from external
-  processes; smoothness is faked with 8 ms micro-steps (~120 Hz), which read
-  as continuous.
+- `DisplayServicesSetBrightnessSmooth(display, delta)` is the native animated
+  ramp the brightness keys use — its float argument is a **delta from current**,
+  not an absolute target (pass an absolute and it silently clamps; this is why
+  it's often reported as broken). `rampBrightness` wraps it; the fader
+  retargets it at 20 Hz and the system interpolates. Software 120 Hz
+  micro-stepping remains as the fallback and for the timed goodnight
+  animation.
 
 ## Notes
 

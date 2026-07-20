@@ -60,8 +60,9 @@ func runSet(_ args: [String]) {
     }
     guard let builtin = onlineDisplays().builtin else { die("built-in display offline") }
     let value = Float(target) / 100
-    fade(builtin, from: brightness(of: builtin), to: value, over: 0.4)
-    guard setBrightness(builtin, value) else { die("brightness set failed") }
+    guard rampBrightness(builtin, to: value) else { die("brightness set failed") }
+    usleep(600_000)             // let the native ramp land...
+    _ = setBrightness(builtin, value)  // ...then pin the exact endpoint (per Lunar's recipe)
     print("brightness: \(percent(brightness(of: builtin)))")
 }
 

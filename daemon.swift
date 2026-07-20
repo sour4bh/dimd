@@ -19,13 +19,12 @@ final class Daemon {
     private var timer: Timer?
     private var signalSources: [DispatchSourceSignal] = []
 
-    // lid fader state (active when config.lidfader)
+    // lid fader (active when config.lidfader): runs on its own tight thread —
+    // main-runloop timers coalesce and share the thread, which reads as stutter.
+    // The hot loop touches only these cached flags, refreshed by evaluate().
     private var sensor: LidSensor?
-    private var faderTimer: Timer?
-    private var faderTop: Float = 1     // the user's setpoint; tracked while the lid is open
-    private var faderLevel: Float = -1  // last level we set; -1 = lid open, not controlling
-    private var lastAngle: Float = -1
-    private var lastMovement = Date.distantPast
+    private var dimActive = false
+    private var builtinID: CGDirectDisplayID?
 
     func run() {
         setvbuf(stdout, nil, _IOLBF, 0)  // line-buffer the launchd log file
@@ -45,16 +44,17 @@ final class Daemon {
 
         if config.lidfader {
             sensor = LidSensor()
-            if sensor == nil {
-                log("lidfader: sensor unavailable, disabled")
-            } else {
-                if let builtin = onlineDisplays().builtin { faderTop = brightness(of: builtin) }
-                scheduleFader(fast: false)
-            }
+            if sensor == nil { log("lidfader: sensor unavailable, disabled") }
         }
 
         log("started: threshold \(Int(config.threshold))s, \(config.blinks) blinks, lidfader \(sensor != nil ? "on" : "off")\(DimState.read() != nil ? ", adopting dimmed state" : "")")
         evaluate()
+
+        if sensor != nil {
+            let thread = Thread { self.faderLoop() }
+            thread.qualityOfService = .userInteractive  // steady 120Hz cadence, no coalescing
+            thread.start()
+        }
         RunLoop.main.run()
     }
 
@@ -68,6 +68,8 @@ final class Daemon {
         } else if hold, idle >= config.threshold, let builtin = displays.builtin {
             dim(builtin)
         }
+        dimActive = DimState.read() != nil
+        builtinID = displays.builtin
         reschedule()
     }
 
@@ -80,8 +82,7 @@ final class Daemon {
 
     private func restore(to saved: Float, displays: Displays, smooth: Bool = true) {
         guard let builtin = displays.builtin else { return }  // lid closed: retry once the panel is back online
-        if smooth { fade(builtin, from: brightness(of: builtin), to: saved, over: 0.3) }
-        guard setBrightness(builtin, saved) else {
+        guard smooth ? rampBrightness(builtin, to: saved) : setBrightness(builtin, saved) else {
             log("restore failed, will retry")
             return
         }
@@ -100,56 +101,51 @@ final class Daemon {
         timer = next
     }
 
-    func faderTick() {
-        guard let sensor, let angle = sensor.angle() else { return }
-        let moving = lastAngle >= 0 && abs(angle - lastAngle) >= 1
-        lastAngle = angle
-        if moving { lastMovement = Date() }
-        let movedRecently = Date().timeIntervalSince(lastMovement) < 2
+    private func faderLoop() {
+        guard let sensor else { return }
+        var top: Float = builtinID.map(brightness(of:)) ?? 1
+        var commanded: Float = -1  // last ramp target; -1 = lid open, not controlling
+        while true {
+            guard let angle = sensor.angle() else { usleep(250_000); continue }
 
-        guard DimState.read() == nil, let builtin = onlineDisplays().builtin else {
-            faderLevel = -1  // goodnight dim owns the panel; re-acquire after restore
-            scheduleFader(fast: false)
-            return
-        }
-
-        if angle >= faderCeiling {
-            if faderLevel >= 0 {
-                // lid back up: glide to the setpoint and hand the panel back
-                fade(builtin, from: faderLevel, to: faderTop, over: 0.25)
-                _ = setBrightness(builtin, faderTop)
-                faderLevel = -1
-                log("lid fader released at \(Int(angle))°, restored \(percent(faderTop))")
-            } else {
-                faderTop = brightness(of: builtin)  // follow brightness-key adjustments
+            guard !dimActive, let builtin = builtinID else {
+                commanded = -1  // goodnight dim owns the panel; re-acquire after restore
+                usleep(250_000)
+                continue
             }
-            scheduleFader(fast: movedRecently)
-            return
-        }
 
-        // below the ceiling: the lid owns the backlight
-        if faderLevel < 0 {
-            faderLevel = brightness(of: builtin)
-            log("lid fader engaged at \(Int(angle))° (top \(percent(faderTop)))")
-        }
-        let target = faderTarget(angle: angle, top: faderTop)
-        let converged = abs(faderLevel - target) <= 0.002
-        if !converged {
-            faderLevel += (target - faderLevel) * 0.12  // low-pass glide
-            _ = setBrightness(builtin, faderLevel)
-        }
-        scheduleFader(fast: movedRecently || !converged)
-    }
+            // lid open, not controlling: just follow brightness-key adjustments
+            if commanded < 0, angle >= faderCeiling {
+                top = brightness(of: builtin)
+                usleep(100_000)
+                continue
+            }
 
-    private func scheduleFader(fast: Bool) {
-        // 60 Hz only while the lid is moving or the glide is converging;
-        // 4 Hz to notice the next movement.
-        let interval: TimeInterval = fast ? 0.016 : 0.25
-        guard faderTimer?.timeInterval != interval else { return }
-        faderTimer?.invalidate()
-        let next = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { _ in Daemon.shared.faderTick() }
-        next.tolerance = fast ? 0 : 0.05
-        faderTimer = next
+            // controlling and back above the ceiling (+2° hysteresis so hovering
+            // at the boundary can't flap): hand the panel back
+            if commanded >= 0, angle >= faderCeiling + 2 {
+                _ = rampBrightness(builtin, to: top)
+                commanded = -1
+                log("lid fader released at \(Int(angle))°, restored \(percent(top))")
+                usleep(100_000)
+                continue
+            }
+
+            // the lid owns the backlight: hand each new target to the native
+            // ramp and let the system interpolate — the brightness-key glide
+            if commanded < 0 {
+                commanded = brightness(of: builtin)
+                log("lid fader engaged at \(Int(angle))° (top \(percent(top)))")
+            }
+            let target = faderTarget(angle: angle, top: top)  // clamps to top at >= ceiling
+            let delta = target - commanded
+            if abs(delta) > 0.005 {
+                // slew-limit: pace coarse sensor jumps into small native ramps
+                commanded += max(-faderMaxStep, min(faderMaxStep, delta))
+                _ = rampBrightness(builtin, to: commanded)
+            }
+            usleep(50_000)  // 20Hz retargeting; the animation lives in the system
+        }
     }
 
     func shutdown() {
