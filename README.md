@@ -33,6 +33,13 @@ no native "stay awake, backlight off" mode — display sleep is all-or-nothing.
 dimd fills the gap: it fades the built-in backlight to 0% when you walk away,
 while the display stays technically awake.
 
+This is the "turn off the MacBook screen but keep it running" mode Apple never
+shipped. Unlike clamshell mode, it needs no external display, keyboard, or
+mouse; unlike `caffeinate`, Amphetamine, or KeepingYouAwake — which keep the
+*system* awake but leave the panel lit — dimd actually takes the backlight to
+zero. Half-close the lid and the screen fades to black while overnight builds,
+downloads, and AI coding agents (Claude Code and friends) keep running.
+
 ## Behavior
 
 | State | Display | Backlight |
@@ -127,3 +134,36 @@ make uninstall   # bootout the agent, remove binary + plist
   saver lock (if configured) still applies.
 - If "Automatically adjust brightness" fights the 0% level, disable it in
   System Settings → Displays.
+
+## References
+
+The hidden hinge sensor behind `dimd lid` has been in MacBooks since 2019 —
+and went properly viral in 2025:
+
+- [samhenrigold/LidAngleSensor](https://github.com/samhenrigold/LidAngleSensor) —
+  the app that made the sensor famous (creaky-door and theremin modes), and the
+  [writeup](https://samhenri.gold/labs/20250906-lid-angle-sensor/) behind it
+- ["The MacBook has a sensor that knows the exact angle of the screen hinge"](https://news.ycombinator.com/item?id=45158968)
+  on Hacker News ·
+  [the r/pcmasterrace post](https://www.reddit.com/r/pcmasterrace/comments/1nczrh7/macbook_has_a_sensor_that_knows_the_exact_angle/) ·
+  [Tom's Hardware](https://www.tomshardware.com/software/developer-tools/engineer-taps-into-apples-hidden-lidanglesensor-api-to-create-a-creaky-door-simulator)
+- [MacRumors (2019): 16-inch MacBook Pro features new "lid angle sensor"](https://www.macrumors.com/2019/11/19/16-inch-macbook-pro-lid-angle-sensor/) —
+  the original discovery via an Apple service document, and the
+  [iFixit teardown analysis](https://www.ifixit.com/News/33952/apple-put-a-hinge-sensor-in-the-16-macbook-pro-what-could-it-be-for)
+- [Hackaday: beating Apple's secret lid-angle sensor calibration](https://hackaday.com/2023/09/26/beating-apples-secret-lid-angle-sensor-calibration-with-custom-tool/)
+- Other readers of the same sensor:
+  [pybooklid](https://github.com/tcsenpai/pybooklid) (Python),
+  [lid-angle-rs](https://github.com/wangfu91/lid-angle-rs) (Rust)
+
+## Related projects
+
+- [nriley/brightness](https://github.com/nriley/brightness) — brightness CLI;
+  the same private DisplayServices route dimd uses to reach the built-in panel
+  on Apple Silicon
+- [MonitorControl](https://github.com/MonitorControl/MonitorControl) and
+  [Lunar](https://github.com/alin23/Lunar) — brightness control for external
+  displays over DDC
+- [KeepingYouAwake](https://github.com/newmarcel/KeepingYouAwake),
+  [Amphetamine](https://apps.apple.com/us/app/amphetamine/id937984704), and
+  the built-in `caffeinate(8)` — prevent the Mac from sleeping; dimd is the
+  complement that turns the screen off while it stays awake
