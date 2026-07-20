@@ -1,6 +1,27 @@
 # dimd
 
-Idle backlight dimmer for MacBooks that stay awake to run background agents.
+![dimd — display stays awake, backlight fades to 0% when you walk away, the lid is a brightness fader](.github/social-preview.png)
+
+**Idle backlight dimmer for MacBooks that stay awake to run background agents —
+plus a lid-angle brightness fader.**
+
+[![release](https://img.shields.io/github/v/release/sour4bh/dimd?color=4c94f8)](https://github.com/sour4bh/dimd/releases)
+[![platform](https://img.shields.io/badge/platform-macOS%20(Apple%20Silicon)-black)](#requirements)
+[![swift](https://img.shields.io/badge/swift-5-F05138)](Makefile)
+[![license](https://img.shields.io/github/license/sour4bh/dimd?color=green)](LICENSE)
+
+The display stays awake, the backlight blinks goodnight and fades to 0% when
+you walk away, and any keypress brings it back instantly. Tilt the lid and it
+becomes a physical brightness knob, gliding with the native brightness-key
+animation. Single binary, no dependencies, no accessibility permissions.
+
+## Install
+
+```sh
+git clone https://github.com/sour4bh/dimd && cd dimd
+make install     # build, install launchd agent
+dimd demo        # see the goodnight blink + fade + restore
+```
 
 ## Why
 
@@ -72,13 +93,12 @@ by hand, `launchctl kickstart -k gui/$(id -u)/local.dimd` to reload.
   per-display brightness API that reaches the built-in panel on Apple Silicon
   (same route as the `brightness` CLI). `dimd selftest` verifies it.
 
-## Install
+## Managing
 
 ```sh
-make install     # build, install plist (paths localized), bootstrap launchd agent
 make status      # detected state + agent state
 make log         # tail the daemon log
-make uninstall
+make uninstall   # bootout the agent, remove binary + plist
 ```
 
 ## Design notes

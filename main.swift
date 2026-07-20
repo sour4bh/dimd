@@ -9,6 +9,8 @@
 
 import Foundation
 
+let version = "1.0.0"
+
 func die(_ message: String) -> Never {
     FileHandle.standardError.write(Data("dimd: \(message)\n".utf8))
     exit(1)
@@ -30,12 +32,14 @@ usage: dimd <command>
   config               show configuration (~/.config/dimd/config)
   config set <k> <v>   set threshold | blinks | dip | fade | lidfader (restarts daemon)
   selftest             verify brightness control works
+  version              print the version
   daemon               run the idle watcher (used by launchd)
 """
 
 let arguments = Array(CommandLine.arguments.dropFirst())
 switch arguments.first ?? "help" {
 case "help", "--help", "-h": print(help)
+case "version", "--version", "-v": print("dimd \(version)")
 case "status": runStatus()
 case "blink": runBlink()
 case "demo": runDemo()
