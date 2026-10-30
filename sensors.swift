@@ -34,3 +34,13 @@ func idleSeconds() -> TimeInterval {
         .map { CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: $0) }
         .min() ?? .infinity
 }
+
+// Brightness (and other media) keys arrive as NX_SYSDEFINED events (CGEventType 14).
+// Depending on the keyboard they may not also register as keyDown, so idleSeconds()
+// can miss them. The type also fires for non-key reasons, so only use it together
+// with an observed brightness change.
+private let systemDefinedEvent = CGEventType(rawValue: 14)!
+
+func secondsSinceSystemDefinedEvent() -> TimeInterval {
+    CGEventSource.secondsSinceLastEventType(.combinedSessionState, eventType: systemDefinedEvent)
+}
