@@ -25,6 +25,7 @@ final class Daemon {
     private var sensor: LidSensor?
     private var dimActive = false
     private var builtinID: CGDirectDisplayID?
+    private var lastRepinLog = Date.distantPast
 
     func run() {
         setvbuf(stdout, nil, _IOLBF, 0)  // line-buffer the launchd log file
@@ -64,7 +65,20 @@ final class Daemon {
         let hold = onACPower() && !displays.hasExternal
         if let state = DimState.read() {
             // Wake on input newer than the dim itself, or when conditions lapse.
-            if !hold || idle < state.age { restore(to: state.saved, displays: displays) }
+            if !hold || idle < state.age {
+                restore(to: state.saved, displays: displays)
+            } else if let builtin = displays.builtin, brightness(of: builtin) > 0.01 {
+                // Something raised the backlight while dimmed. A brightness key pressed
+                // after the dim is the user asking for light: hand the panel back at
+                // their level. Anything else (wake/lock transitions) gets re-pinned to 0.
+                if secondsSinceSystemDefinedEvent() < state.age {
+                    DimState.clear()
+                    log("brightness key while dimmed, handing the panel back at \(percent(brightness(of: builtin)))")
+                } else {
+                    _ = setBrightness(builtin, 0)
+                    logRepin("backlight crept up while dimmed, re-pinned to 0%")
+                }
+            }
         } else if hold, idle >= config.threshold, let builtin = displays.builtin {
             dim(builtin)
         }
@@ -101,15 +115,29 @@ final class Daemon {
         timer = next
     }
 
+    // A smooth system ramp still in flight can trade a few corrections with us;
+    // keep the log readable.
+    private func logRepin(_ message: String) {
+        guard Date().timeIntervalSince(lastRepinLog) > 60 else { return }
+        lastRepinLog = Date()
+        log("\(message) (logged at most once a minute)")
+    }
+
     private func faderLoop() {
         guard let sensor else { return }
         var top: Float = builtinID.map(brightness(of:)) ?? 1
         var commanded: Float = -1  // last ramp target; -1 = lid open, not controlling
+        // Brightness keys while the fader is engaged re-anchor the curve at the
+        // current angle; `top` (the lid-open level) is never changed by them.
+        var anchor: FaderAnchor?
+        var lastRamp = Date.distantPast
+        var settled: Float?        // panel level read once our last ramp has landed
+        var keyBurstLogged = false
         while true {
             guard let angle = sensor.angle() else { usleep(250_000); continue }
 
             guard !dimActive, let builtin = builtinID else {
-                commanded = -1  // goodnight dim owns the panel; re-acquire after restore
+                commanded = -1; anchor = nil; settled = nil  // goodnight dim owns the panel; re-acquire after restore
                 usleep(250_000)
                 continue
             }
@@ -125,7 +153,7 @@ final class Daemon {
             // at the boundary can't flap): hand the panel back
             if commanded >= 0, angle >= faderCeiling + 2 {
                 _ = rampBrightness(builtin, to: top)
-                commanded = -1
+                commanded = -1; anchor = nil; settled = nil
                 log("lid fader released at \(Int(angle))°, restored \(percent(top))")
                 usleep(100_000)
                 continue
@@ -135,14 +163,53 @@ final class Daemon {
             // ramp and let the system interpolate — the brightness-key glide
             if commanded < 0 {
                 commanded = brightness(of: builtin)
+                settled = nil
                 log("lid fader engaged at \(Int(angle))° (top \(percent(top)))")
             }
-            let target = faderTarget(angle: angle, top: top)  // clamps to top at >= ceiling
+
+            // Brightness keys arrive as system-defined events. While one is recent,
+            // don't retarget (that would undo the key); follow the panel instead and
+            // re-anchor the curve at this angle.
+            let actual = brightness(of: builtin)
+            if secondsSinceSystemDefinedEvent() < 1.2 {
+                if abs(actual - (settled ?? commanded)) > 0.03 {
+                    anchor = FaderAnchor(angle: angle, level: actual)
+                    commanded = actual
+                    settled = actual
+                    if !keyBurstLogged {
+                        keyBurstLogged = true
+                        log("brightness keys at \(Int(angle))°: anchoring the fader there (fully open still restores \(percent(top)))")
+                    }
+                }
+                usleep(50_000)
+                continue
+            }
+            if keyBurstLogged, let anchor {
+                keyBurstLogged = false
+                log("anchored \(percent(anchor.level)) at \(Int(anchor.angle))°")
+            }
+
+            // Once our own ramp has landed, remember where the panel actually is;
+            // if it later rises with no key involved, re-pin it.
+            if Date().timeIntervalSince(lastRamp) > 0.6 {
+                if let seen = settled {
+                    if actual > seen + 0.03 {
+                        _ = setBrightness(builtin, seen)
+                        logRepin("backlight crept up under the lid fader, re-pinned to \(percent(seen)) at \(Int(angle))°")
+                    }
+                } else {
+                    settled = actual
+                }
+            }
+
+            let target = faderTarget(angle: angle, top: top, anchor: anchor)
             let delta = target - commanded
             if abs(delta) > 0.005 {
                 // slew-limit: pace coarse sensor jumps into small native ramps
                 commanded += max(-faderMaxStep, min(faderMaxStep, delta))
                 _ = rampBrightness(builtin, to: commanded)
+                lastRamp = Date()
+                settled = nil
             }
             usleep(50_000)  // 20Hz retargeting; the animation lives in the system
         }
@@ -153,4 +220,24 @@ final class Daemon {
         log("stopped")
         exit(0)
     }
+}
+
+// A brightness-key override made while the fader is engaged. Below the anchor the
+// level scales down to 0% at faderFloor; above it, it blends back up to `top` at
+// faderCeiling, so opening the lid always ends at the normal lid-open brightness.
+struct FaderAnchor {
+    let angle: Float
+    let level: Float
+}
+
+func faderTarget(angle: Float, top: Float, anchor: FaderAnchor?) -> Float {
+    guard let anchor else { return faderTarget(angle: angle, top: top) }
+    if angle <= anchor.angle {
+        let span = anchor.angle - faderFloor
+        guard span > 1 else { return anchor.level }
+        return anchor.level * min(max((angle - faderFloor) / span, 0), 1)
+    }
+    let span = faderCeiling - anchor.angle
+    guard span > 1 else { return top }
+    return anchor.level + (top - anchor.level) * min((angle - anchor.angle) / span, 1)
 }
